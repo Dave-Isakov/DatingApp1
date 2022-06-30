@@ -12,5 +12,6 @@ namespace API.Entities
         //fully defined relationship between photos and users
         public AppUser AppUser { get; set; }
         public int AppUserId { get; set; }
+        public bool IsApproved { get; set; }
     }
 }

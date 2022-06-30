@@ -1,5 +1,3 @@
-using System.Security.Claims;
-using API.Data;
 using API.DTOs;
 using API.Entities;
 using API.Extensions;
@@ -8,7 +6,6 @@ using API.Interfaces;
 using AutoMapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc; //Model View Controller - View will come from client (Angular)
-using Microsoft.EntityFrameworkCore;
 
 namespace API.Controllers
 {
@@ -43,7 +40,8 @@ namespace API.Controllers
         [HttpGet("{username}", Name = "GetUser")]
         public async Task<ActionResult<MemberDTO>> GetUser(string username)
         {
-            return await _unitOfWork.UserRepository.GetMemberAsync(username);
+            var currentUser = User.GetUsername();
+            return await _unitOfWork.UserRepository.GetMemberAsync(username, isCurrentUser: currentUser == username);
         }
 
         [HttpPut]
@@ -70,11 +68,6 @@ namespace API.Controllers
                 PublicId = result.PublicId
             };
 
-            if(user.Photos.Count == 0)
-            {
-                photo.IsMain = true;
-            }
-
             user.Photos.Add(photo);
             if(await _unitOfWork.Complete())
             {
@@ -94,6 +87,8 @@ namespace API.Controllers
             var currentMain = user.Photos.FirstOrDefault(photo => photo.IsMain);
 
             if(currentMain!=null) currentMain.IsMain = false;
+            if(!photo.IsApproved) return BadRequest("This photo is not approved yet.");
+            
             photo.IsMain = true;
 
             if(await _unitOfWork.Complete()) return NoContent();
