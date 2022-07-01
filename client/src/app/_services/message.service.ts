@@ -7,6 +7,7 @@ import { environment } from 'src/environments/environment';
 import { Group } from '../models/group';
 import { Message } from '../models/message';
 import { User } from '../models/user';
+import { BusyService } from './busy.service';
 import { getPaginatedResult, getPaginationHeaders } from './paginationHelper';
 
 @Injectable({
@@ -19,14 +20,15 @@ export class MessageService {
   private messageThreadSource = new BehaviorSubject<Message[]>([]);
   messageThread$ = this.messageThreadSource.asObservable();
 
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient, private busyService: BusyService) { }
 
-  createHubConnection(user: User, otherUser: string){
+  createHubConnection(user: User, otherUser: string) {
+    this.busyService.busy();
     this.hubConnection = new HubConnectionBuilder().withUrl(this.hubUrl + 'message?user=' + otherUser, {
       accessTokenFactory: () => user.token
     }).withAutomaticReconnect().build();
 
-    this.hubConnection.start().catch(error => console.log(error));
+    this.hubConnection.start().catch(error => console.log(error)).finally(() => this.busyService.idle());
     this.hubConnection.on("ReceiveMessageThread", messages => {
       this.messageThreadSource.next(messages);
     })
@@ -40,7 +42,7 @@ export class MessageService {
       if (group.connections.some(x => x.username === otherUser)) {
         this.messageThread$.pipe(take(1)).subscribe(messages => {
           messages.forEach(message => {
-            if(!message.dateRead) {
+            if (!message.dateRead) {
               message.dateRead = new Date(Date.now())
             }
           })
@@ -51,8 +53,9 @@ export class MessageService {
   }
 
   stopHubConnection() {
-    if(this.hubConnection) {
-    this.hubConnection.stop();
+    if (this.hubConnection) {
+      this.messageThreadSource.next([]);
+      this.hubConnection.stop();
     }
   }
 
@@ -67,7 +70,7 @@ export class MessageService {
   }
 
   async sendMessage(username: string, content: string) {
-    return this.hubConnection.invoke('SendMessage', {recipientUsername: username, content}).catch(error => console.log(error));
+    return this.hubConnection.invoke('SendMessage', { recipientUsername: username, content }).catch(error => console.log(error));
   }
 
   deleteMessage(id: number) {
