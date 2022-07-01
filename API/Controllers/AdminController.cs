@@ -1,107 +1,97 @@
-using API.DTOs;
-using API.Entities;
-using API.Interfaces;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-
-namespace API.Controllers
+namespace API.Controllers;
+public class AdminController : BaseAPIController
 {
-    public class AdminController : BaseAPIController
+    private readonly UserManager<AppUser> _userManager;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IPhotoService _photoService;
+
+    public AdminController(UserManager<AppUser> userManager, IUnitOfWork unitOfWork, IPhotoService photoService)
     {
-        private readonly UserManager<AppUser> _userManager;
-        private readonly IUnitOfWork _unitOfWork;
-        private readonly IPhotoService _photoService;
+        _unitOfWork = unitOfWork;
+        _photoService = photoService;
+        _userManager = userManager;
+    }
 
-        public AdminController(UserManager<AppUser> userManager, IUnitOfWork unitOfWork, IPhotoService photoService)
-        {
-            _unitOfWork = unitOfWork;
-            _photoService = photoService;
-            _userManager = userManager;
-        }
-
-        [Authorize(Policy="RequireAdminRole")]
-        [HttpGet("users-with-roles")]
-        public async Task<ActionResult> GetUsersWithRoles()
-        {
-            var users = await _userManager.Users
-                .Include(role => role.UserRoles)
-                .ThenInclude(role => role.Role)
-                .OrderBy(user => user.UserName)
-                .Select(user => new 
-                {
-                    user.Id,
-                    Username = user.UserName,
-                    Roles = user.UserRoles.Select(role => role.Role.Name).ToList()
-                })
-                .ToListAsync();
-            return Ok(users);
-        }
-
-        [HttpPost("edit-roles/{username}")]
-        public async Task<ActionResult> EditRoles(string username, [FromQuery] string roles)
-        {
-            var selectedRoles = roles.Split(",").ToArray();
-
-            var user = await _userManager.FindByNameAsync(username);
-            if(user == null) return NotFound("Could not find user!");
-
-            var userRoles = await _userManager.GetRolesAsync(user);
-
-            var result = await _userManager.AddToRolesAsync(user, selectedRoles.Except(userRoles));
-            if (!result.Succeeded) return BadRequest("Failed to add to roles");
-
-            result = await _userManager.RemoveFromRolesAsync(user, userRoles.Except(selectedRoles));
-            if(!result.Succeeded) return BadRequest("Failed to remove from roles");
-
-            return Ok(await _userManager.GetRolesAsync(user));
-        }
-
-        [Authorize(Policy="ModeratePhotoRole")]
-        [HttpGet("photos-for-approval")]
-        public async Task<ActionResult> GetPhotosForApproval()
-        {
-            var photos = await _unitOfWork.PhotoRepository.GetUnapprovedPhotos();
-            return Ok(photos);
-        }
-        
-        [Authorize(Policy="ModeratePhotoRole")]
-        [HttpPost("approve-photo/{id}")]
-        public async Task<ActionResult> ApprovePhoto(int id)
-        {
-            var photo = await _unitOfWork.PhotoRepository.GetPhotoById(id);
-            var user = await _unitOfWork.UserRepository.GetUserByPhotoId(id);
-            if(photo == null) return NotFound("Could not find photo");
-
-            photo.IsApproved = true;
-            if(!user.Photos.Any(x => x.IsMain)) photo.IsMain = true;
-
-            await _unitOfWork.Complete();
-            return Ok();
-        }
-
-        [Authorize(Policy="ModeratePhotoRole")]
-        [HttpPost("reject-photo/{id}")]
-        public async Task<ActionResult> RejectPhoto(int id)
-        {
-            var photo = await _unitOfWork.PhotoRepository.GetPhotoById(id);
-            if(photo.PublicId != null)
+    [Authorize(Policy = "RequireAdminRole")]
+    [HttpGet("users-with-roles")]
+    public async Task<ActionResult> GetUsersWithRoles()
+    {
+        var users = await _userManager.Users
+            .Include(role => role.UserRoles)
+            .ThenInclude(role => role.Role)
+            .OrderBy(user => user.UserName)
+            .Select(user => new
             {
-                var result = await _photoService.DeletePhotoAsync(photo.PublicId);
-                if(result.Result == "ok")
-                {
-                    _unitOfWork.PhotoRepository.RemovePhoto(photo);
-                }
-            }
-            else
+                user.Id,
+                Username = user.UserName,
+                Roles = user.UserRoles.Select(role => role.Role.Name).ToList()
+            })
+            .ToListAsync();
+        return Ok(users);
+    }
+
+    [HttpPost("edit-roles/{username}")]
+    public async Task<ActionResult> EditRoles(string username, [FromQuery] string roles)
+    {
+        var selectedRoles = roles.Split(",").ToArray();
+
+        var user = await _userManager.FindByNameAsync(username);
+        if (user == null) return NotFound("Could not find user!");
+
+        var userRoles = await _userManager.GetRolesAsync(user);
+
+        var result = await _userManager.AddToRolesAsync(user, selectedRoles.Except(userRoles));
+        if (!result.Succeeded) return BadRequest("Failed to add to roles");
+
+        result = await _userManager.RemoveFromRolesAsync(user, userRoles.Except(selectedRoles));
+        if (!result.Succeeded) return BadRequest("Failed to remove from roles");
+
+        return Ok(await _userManager.GetRolesAsync(user));
+    }
+
+    [Authorize(Policy = "ModeratePhotoRole")]
+    [HttpGet("photos-for-approval")]
+    public async Task<ActionResult> GetPhotosForApproval()
+    {
+        var photos = await _unitOfWork.PhotoRepository.GetUnapprovedPhotos();
+        return Ok(photos);
+    }
+
+    [Authorize(Policy = "ModeratePhotoRole")]
+    [HttpPost("approve-photo/{id}")]
+    public async Task<ActionResult> ApprovePhoto(int id)
+    {
+        var photo = await _unitOfWork.PhotoRepository.GetPhotoById(id);
+        var user = await _unitOfWork.UserRepository.GetUserByPhotoId(id);
+        if (photo == null) return NotFound("Could not find photo");
+
+        photo.IsApproved = true;
+        if (!user.Photos.Any(x => x.IsMain)) photo.IsMain = true;
+
+        await _unitOfWork.Complete();
+        return Ok();
+    }
+
+    [Authorize(Policy = "ModeratePhotoRole")]
+    [HttpPost("reject-photo/{id}")]
+    public async Task<ActionResult> RejectPhoto(int id)
+    {
+        var photo = await _unitOfWork.PhotoRepository.GetPhotoById(id);
+        if (photo.PublicId != null)
+        {
+            var result = await _photoService.DeletePhotoAsync(photo.PublicId);
+            if (result.Result == "ok")
             {
                 _unitOfWork.PhotoRepository.RemovePhoto(photo);
             }
-
-            await _unitOfWork.Complete();
-
-            return Ok();
         }
+        else
+        {
+            _unitOfWork.PhotoRepository.RemovePhoto(photo);
+        }
+
+        await _unitOfWork.Complete();
+
+        return Ok();
     }
 }

@@ -1,5 +1,3 @@
-using API.Helpers;
-using API.Interfaces;
 using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
 using Microsoft.Extensions.Options;

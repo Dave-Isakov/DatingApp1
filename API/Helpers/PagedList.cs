@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-
 namespace API.Helpers
 {
     public class PagedList<T> : List<T>

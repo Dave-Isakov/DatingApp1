@@ -1,8 +1,3 @@
-using API.DTOs;
-using API.Entities;
-using API.Interfaces;
-using Microsoft.EntityFrameworkCore;
-
 namespace API.Data
 {
     public class PhotoRepository : IPhotoRepository
